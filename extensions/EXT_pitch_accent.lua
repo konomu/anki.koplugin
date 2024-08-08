@@ -112,8 +112,8 @@ function PitchAccent:get_pitch_accents(dict_result)
                 path_d = path_d .. string.format(" L%d %d", cx, cy)
             end
 
-            last_cx = cx  -- Store the cx value for later use
-            last_cy = cy  -- Update last_cy
+            last_cx = cx 
+            last_cy = cy
 
             logger.dbg("EXT: PitchAccent#get_pitch_accent(): determined marking for mora: ", idx, table.concat(mora), marking)
             for _, ch in ipairs(mora) do
@@ -121,7 +121,7 @@ function PitchAccent:get_pitch_accents(dict_result)
             end
         end
 
-        -- After processing all moras, if the last mora was a downstep, adjust last_cy
+        -- After processing all moras, if the last mora was a downstep, adjust triangle y-coord
         tri_y = was_downstep and 75 or (is_heiban and 25 or last_cy)
 
         -- Add the path element
