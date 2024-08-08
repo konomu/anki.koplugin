@@ -9,14 +9,14 @@ e.g. さけ・ぶ [2]【叫ぶ】
 this extension extracts the [2] from the definition's headword and stores it as a html representation and/or a number.
     ]],
     -- These 2 fields should be modified to point to the desired field on the card
-    field_pitch_html = 'VocabPitchPattern',
-    field_pitch_num = 'VocabPitchNum',
+    field_pitch_html = 'Graph',
+    field_pitch_num = 'Graph',
 
-    -- bunch of DOM element templates used to display pitch accent
-    pitch_pattern = "<span style=\"display:inline;\">%s</span>",
-    mark_accented = "<span style=\"display:inline-block;position:relative;\"><span style=\"display:inline;\">%s</span><span style=\"border-color:currentColor;display:block;user-select:none;pointer-events:none;position:absolute;top:0.1em;left:0;right:0;height:0;border-top-width:0.1em;border-top-style:solid;\"></span></span>",
-    mark_downstep = "<span style=\"display:inline-block;position:relative;padding-right:0.1em;margin-right:0.1em;\"><span style=\"display:inline;\">%s</span><span style=\"border-color:currentColor;display:block;user-select:none;pointer-events:none;position:absolute;top:0.1em;left:0;right:0;height:0;border-top-width:0.1em;border-top-style:solid;right:-0.1em;height:0.4em;border-right-width:0.1em;border-right-style:solid;\"></span></span>",
-    unmarked_char = "<span style=\"display:inline-block;position:relative;\"><span style=\"display:inline;\">%s</span><span style=\"border-color:currentColor;\"></span></span>",
+    -- SVG element templates used to display pitch accent
+    pitch_pattern = "<svg xmlns=\"http://www.w3.org/2000/svg\" focusable=\"false\" viewBox=\"0 0 350 100\" style=\"display:inline-block;vertical-align:middle;height:1.5em;\">%s</svg>",
+    mark_accented = "<circle cx=\"%d\" cy=\"25\" r=\"15\" style=\"stroke-width:5;fill:currentColor;stroke:currentColor;\"></circle>",
+    mark_downstep = "<circle cx=\"%d\" cy=\"25\" r=\"15\" style=\"fill:none;stroke-width:5;stroke:currentColor;\"></circle><circle cx=\"%d\" cy=\"25\" r=\"5\" style=\"fill:currentColor;\"></circle>",
+    unmarked_char = "<circle cx=\"%d\" cy=\"75\" r=\"15\" style=\"stroke-width:5;fill:currentColor;stroke:currentColor;\"></circle>",
     pitch_downstep_pattern = "(%[([0-9])%])",
 }
 
@@ -57,7 +57,6 @@ function PitchAccent:get_pitch_downsteps(dict_result)
     return string.gmatch(get_first_line(dict_result.definition), self.pitch_downstep_pattern)
 end
 
-
 function PitchAccent:get_pitch_accents(dict_result)
     local _morae = nil
     local function get_morae()
@@ -69,28 +68,75 @@ function PitchAccent:get_pitch_accents(dict_result)
 
     local function _convert(downstep)
         local pitch_visual = {}
+        local last_cx = 25
+        local last_cy = 25
+        local tri_y = 25
+        local path_d = "M"
         local is_heiban = downstep == "0"
+        local was_downstep = false
+    
         for idx, mora in ipairs(get_morae()) do
             local marking = nil
+            local cx = 25 + (idx - 1) * 50  -- Calculate cx based on the index
+            local cy
+
             if is_heiban then
-                marking = idx == 1 and self.unmarked_char or self.mark_accented
-            else
-                if idx == tonumber(downstep) then
-                    marking = self.mark_downstep
+                -- Handle heiban
+                marking = idx == 1 and self.unmarked_char:format(cx) or self.mark_accented:format(cx)
+                cy = idx == 1 and 75 or 25
+            elseif idx == tonumber(downstep) then
+                -- Handle downstep case
+                marking = self.mark_downstep:format(cx, cx)
+                cy = 25
+                was_downstep = true
+            elseif idx < tonumber(downstep) then
+                if idx == 1 then
+                    -- Handle non-heiban first mora
+                    marking = self.unmarked_char:format(cx)
+                    cy = 75
                 else
-                    marking = idx < tonumber(downstep) and self.mark_accented or self.unmarked_char
+                    -- Handle accents before downstep
+                    marking = self.mark_accented:format(cx)
+                    cy = 25
                 end
+            else
+                -- Handle unmarked characters
+                marking = self.unmarked_char:format(cx)
+                cy = 75
             end
-            -- when dealing with the downstep mora, we want the downstep to appear only on the last char of the mora
-            local is_downstep = marking == self.mark_downstep
+
+            -- Update path data
+            if idx == 1 then
+                path_d = path_d .. string.format(" %d %d", cx, cy)  -- Move command for the first point
+            else
+                path_d = path_d .. string.format(" L%d %d", cx, cy)  -- Line command for subsequent points
+            end
+
+            last_cx = cx
+            last_cy = cy
+
             logger.dbg("EXT: PitchAccent#get_pitch_accent(): determined marking for mora: ", idx, table.concat(mora), marking)
             for _, ch in ipairs(mora) do
-                table.insert(pitch_visual, (is_downstep and self.mark_accented or marking):format(ch))
-            end
-            if is_downstep then
-                pitch_visual[#pitch_visual] = self.mark_downstep:format(mora[#mora])
+                table.insert(pitch_visual, marking)
             end
         end
+
+        -- After processing all moras, if the last mora was a downstep, adjust last_cy
+        if was_downstep then
+            tri_y = 75
+        else tri_y = last_cy
+        end
+
+        -- Add the path element
+        local path_element = string.format(
+            "<path d=\"%s\" style=\"fill:none;stroke-width:5;stroke:currentColor;\"></path><path d=\"M%d %d L%d %d\" style=\"fill:none;stroke-width:5;stroke:currentColor;stroke-dasharray:5 5;\"></path><path d=\"M0 13 L15 -13 L-15 -13 Z\" transform=\"translate(%d,%d)\" style=\"fill:none;stroke-width:5;stroke:currentColor;\"></path>",
+            path_d,
+            last_cx, last_cy, last_cx + 50, tri_y,
+            last_cx + 50, tri_y
+        )
+        
+        table.insert(pitch_visual, path_element)
+    
         return self.pitch_pattern:format(table.concat(pitch_visual))
     end
 
