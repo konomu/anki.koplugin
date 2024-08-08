@@ -13,7 +13,6 @@ this extension extracts the [2] from the definition's headword and stores it as 
     field_pitch_num = 'Graph',
 
     -- SVG element templates used to display pitch accent
-    pitch_pattern = "<svg xmlns=\"http://www.w3.org/2000/svg\" focusable=\"false\" viewBox=\"0 0 %d 100\" style=\"display:inline-block;vertical-align:middle;height:1.5em;\">%s</svg>",
     mark_accented = "<circle cx=\"%d\" cy=\"25\" r=\"15\" style=\"stroke-width:5;fill:currentColor;stroke:currentColor;\"></circle>",
     mark_downstep = "<circle cx=\"%d\" cy=\"25\" r=\"15\" style=\"fill:none;stroke-width:5;stroke:currentColor;\"></circle><circle cx=\"%d\" cy=\"25\" r=\"5\" style=\"fill:currentColor;\"></circle>",
     unmarked_char = "<circle cx=\"%d\" cy=\"75\" r=\"15\" style=\"stroke-width:5;fill:currentColor;stroke:currentColor;\"></circle>",
@@ -67,12 +66,14 @@ function PitchAccent:get_pitch_accents(dict_result)
 
     local function _convert(downstep)
         local pitch_visual = {}
-        local last_cx = 25  -- Initialize cx for the first mora
-        local last_cy = 25  -- Initialize last_cy to a default value
+        local mora_count = #get_morae()
+        local svg_width = 100 + (mora_count - 1) * 50
+        local last_cx = 25
+        local last_cy = 25
         local tri_y = 25
-        local path_d = "M"  -- Start the path data with a move command
+        local path_d = "M"
         local is_heiban = downstep == "0"
-        local was_downstep = false  -- Flag to track if the last mora was a downstep
+        local was_downstep = false
     
         for idx, mora in ipairs(get_morae()) do
             local marking = nil
@@ -106,9 +107,9 @@ function PitchAccent:get_pitch_accents(dict_result)
 
             -- Update path data
             if idx == 1 then
-                path_d = path_d .. string.format(" %d %d", cx, cy)  -- Move command for the first point
+                path_d = path_d .. string.format(" %d %d", cx, cy)
             else
-                path_d = path_d .. string.format(" L%d %d", cx, cy)  -- Line command for subsequent points
+                path_d = path_d .. string.format(" L%d %d", cx, cy)
             end
 
             last_cx = cx  -- Store the cx value for later use
@@ -120,7 +121,7 @@ function PitchAccent:get_pitch_accents(dict_result)
             end
         end
 
-        -- After processing all moras, set tri_y based on last_mora conditions
+        -- After processing all moras, if the last mora was a downstep, adjust last_cy
         tri_y = was_downstep and 75 or (is_heiban and 25 or last_cy)
 
         -- Add the path element
@@ -128,12 +129,19 @@ function PitchAccent:get_pitch_accents(dict_result)
             "<path d=\"%s\" style=\"fill:none;stroke-width:5;stroke:currentColor;\"></path><path d=\"M%d %d L%d %d\" style=\"fill:none;stroke-width:5;stroke:currentColor;stroke-dasharray:5 5;\"></path><path d=\"M0 13 L15 -13 L-15 -13 Z\" transform=\"translate(%d,%d)\" style=\"fill:none;stroke-width:5;stroke:currentColor;\"></path>",
             path_d,
             last_cx, last_cy, last_cx + 50, tri_y,
-            last_cx + 50, tri_y  -- Keep the previous transform values; adjust if needed
+            last_cx + 50, tri_y
         )
         
         table.insert(pitch_visual, path_element)
     
-        return self.pitch_pattern:format(table.concat(pitch_visual))
+        -- Format the SVG with dynamic width
+        local pitch_pattern = string.format(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" focusable=\"false\" viewBox=\"0 0 %d 100\" style=\"display:inline-block;vertical-align:middle;height:1.5em;\">%s</svg>",
+            svg_width,
+            table.concat(pitch_visual)
+        )
+
+        return pitch_pattern
     end
 
     local downstep_iter = self:get_pitch_downsteps(dict_result)
